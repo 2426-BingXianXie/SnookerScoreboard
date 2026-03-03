@@ -1,6 +1,15 @@
 import React from 'react'
 import './App.css'
 
+/**
+ * Top-level snooker scoreboard UI.
+ *
+ * Responsibilities:
+ * - Maintain match state (players, frames won, current frame number, best-of setting).
+ * - Enforce basic snooker scoring flow (reds vs colours, fouls, reds remaining).
+ * - Track the current break and a lightweight action history for undo.
+ * - Drive the tablet‑friendly UI for scoring, fouls, and frame control.
+ */
 function App() {
   const [players, setPlayers] = React.useState([
     { name: 'Player 1', frameScore: 0, framesWon: 0 },
@@ -19,6 +28,10 @@ function App() {
   const currentPlayer = players[currentPlayerIndex]
   const matchOver = matchWinnerIndex !== null
 
+  /**
+   * Increment a player's frame score by a delta.
+   * Positive deltas are scoring shots; negative deltas are undo adjustments.
+   */
   function updatePlayerScore(playerIndex, delta) {
     setPlayers((prev) =>
       prev.map((p, i) =>
@@ -27,12 +40,23 @@ function App() {
     )
   }
 
+  /**
+   * Update the display name for a player at the given index.
+   */
   function handleNameChange(index, name) {
     setPlayers((prev) =>
       prev.map((p, i) => (i === index ? { ...p, name } : p)),
     )
   }
 
+  /**
+   * Handle a successful pot of a red or colour.
+   *
+   * Applies simple sequencing rules:
+   * - Prevents back‑to‑back colours while reds remain.
+   * - Decrements redsRemaining when a red is scored.
+   * Also records the action in history to support undo.
+   */
   function handlePot(points, ballType) {
     if (matchOver) return
 
@@ -55,6 +79,10 @@ function App() {
     setLastBallType(ballType)
   }
 
+  /**
+   * Award foul points to the non‑striker and reset the current break.
+   * The action is recorded so it can be undone.
+   */
   function handleFoul(points) {
     if (matchOver) return
     const opponentIndex = 1 - currentPlayerIndex
@@ -75,6 +103,10 @@ function App() {
     setLastBallType(null)
   }
 
+  /**
+   * Pass the table to the other player and reset the current break.
+   * Stores enough previous state to allow undo.
+   */
   function handleSwitchTurn() {
     if (matchOver) return
     setHistory((prev) => [
@@ -91,6 +123,11 @@ function App() {
     setLastBallType(null)
   }
 
+  /**
+   * Close out the current frame, award it to the points leader,
+   * and advance frame/match state. When the winner reaches the
+   * required number of frames (based on bestOf), the match is over.
+   */
   function handleEndFrame() {
     if (matchOver) return
 
@@ -121,6 +158,10 @@ function App() {
     setLastBallType(null)
   }
 
+  /**
+   * Undo the last scoring / foul / switch action within the current frame.
+   * Uses the history stack to restore scores, break, redsRemaining, and turn.
+   */
   function handleUndo() {
     if (matchOver) return
     if (history.length === 0) return
@@ -149,6 +190,10 @@ function App() {
     }
   }
 
+  /**
+   * Reset all match state but keep the existing player names.
+   * Clears scores, frames won, break, history, and match winner.
+   */
   function handleNewMatch() {
     setPlayers((prev) =>
       prev.map((p) => ({
