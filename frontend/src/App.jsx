@@ -1,5 +1,12 @@
 import React from 'react'
 import './App.css'
+import {
+  createInitialState,
+  applyAction,
+  isMatchOver,
+  matchReducer,
+} from './snookerState'
+import { useRoomConnection } from './useRoomConnection'
 
 /**
  * Top-level snooker scoreboard UI.
@@ -11,72 +18,89 @@ import './App.css'
  * - Drive the tablet‑friendly UI for scoring, fouls, and frame control.
  */
 function App() {
-  const [players, setPlayers] = React.useState([
-    { name: 'Player 1', frameScore: 0, framesWon: 0 },
-    { name: 'Player 2', frameScore: 0, framesWon: 0 },
-  ])
-  const [currentPlayerIndex, setCurrentPlayerIndex] = React.useState(0)
-  const [currentBreak, setCurrentBreak] = React.useState(0)
-  const [frameNumber, setFrameNumber] = React.useState(1)
-  const [bestOf, setBestOf] = React.useState(5)
-  const [history, setHistory] = React.useState([])
-  const [redsRemaining, setRedsRemaining] = React.useState(15)
-  const [lastBallType, setLastBallType] = React.useState(null) // 'red' | 'colour' | null
-  const [matchWinnerIndex, setMatchWinnerIndex] = React.useState(null)
+  const [state, dispatch] = React.useReducer(matchReducer, undefined, () =>
+    createInitialState(),
+  )
   const [showRules, setShowRules] = React.useState(false)
+  const [roomMode, setRoomMode] = React.useState(null) // null | 'create' | 'join'
+  const [joinCodeInput, setJoinCodeInput] = React.useState('')
+
+  const {
+    roomId,
+    codes,
+    role,
+    connectionStatus,
+    stateFromServer,
+    hasReferee,
+    sendAction,
+  } = useRoomConnection({
+    mode: roomMode,
+    joinCode: roomMode === 'join' ? joinCodeInput.trim().toUpperCase() : null,
+  })
+
+  const effectiveState = stateFromServer || state
+
+  const {
+    players,
+    currentPlayerIndex,
+    currentBreak,
+    frameNumber,
+    bestOf,
+    history,
+    redsRemaining,
+    lastBallType,
+    matchWinnerIndex,
+  } = effectiveState
 
   const currentPlayer = players[currentPlayerIndex]
-  const matchOver = matchWinnerIndex !== null
+  const matchOver = isMatchOver(effectiveState)
+  const isReferee = role === 'referee'
+  const isOnline = !!roomId
 
-  /**
-   * Increment a player's frame score by a delta.
-   * Positive deltas are scoring shots; negative deltas are undo adjustments.
-   */
-  function updatePlayerScore(playerIndex, delta) {
-    setPlayers((prev) =>
-      prev.map((p, i) =>
-        i === playerIndex ? { ...p, frameScore: p.frameScore + delta } : p,
-      ),
-    )
-  }
+  // In local mode (no room), allow edits while match is ongoing.
+  // In online mode, referee always edits; players can edit only when no referee is present.
+  const canEdit =
+    !matchOver &&
+    (!isOnline || isReferee || (role === 'player' && !hasReferee))
 
   /**
    * Update the display name for a player at the given index.
    */
   function handleNameChange(index, name) {
-    setPlayers((prev) =>
-      prev.map((p, i) => (i === index ? { ...p, name } : p)),
-    )
+    const action = { type: 'rename_player', index, name }
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
+    }
   }
 
   /**
    * Handle a successful pot of a red or colour.
    *
-   * Applies simple sequencing rules:
-   * - Prevents back‑to‑back colours while reds remain.
-   * - Decrements redsRemaining when a red is scored.
-   * Also records the action in history to support undo.
+   * Uses the pure reducer and shows a message if the
+   * action would be rejected (for example, colour after colour while reds remain).
    */
   function handlePot(points, ballType) {
-    if (matchOver) return
+    if (!canEdit) return
 
-    // Prevent colours being potted one after another while reds are still on the table.
-    if (ballType === 'colour' && redsRemaining > 0 && lastBallType === 'colour') {
+    const action = { type: 'pot', points, ballType }
+    const preview = applyAction(effectiveState, action)
+
+    if (
+      preview === state &&
+      ballType === 'colour' &&
+      redsRemaining > 0 &&
+      lastBallType === 'colour'
+    ) {
       window.alert('You must pot a red before potting another colour.')
       return
     }
-
-    if (ballType === 'red' && redsRemaining > 0) {
-      setRedsRemaining((prev) => Math.max(0, prev - 1))
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
     }
-
-    updatePlayerScore(currentPlayerIndex, points)
-    setCurrentBreak((prev) => prev + points)
-    setHistory((prev) => [
-      ...prev,
-      { type: 'pot', playerIndex: currentPlayerIndex, points, ballType },
-    ])
-    setLastBallType(ballType)
   }
 
   /**
@@ -84,23 +108,13 @@ function App() {
    * The action is recorded so it can be undone.
    */
   function handleFoul(points) {
-    if (matchOver) return
-    const opponentIndex = 1 - currentPlayerIndex
-    const prevBreak = currentBreak
-    updatePlayerScore(opponentIndex, points)
-    setCurrentBreak(0)
-    setHistory((prev) => [
-      ...prev,
-      {
-        type: 'foul',
-        opponentIndex,
-        points,
-        previousBreak: prevBreak,
-      },
-    ])
-    // After a foul, next legal ball depends on table, but
-    // for our simple model we clear the last ball info.
-    setLastBallType(null)
+    if (!canEdit) return
+    const action = { type: 'foul', points }
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
+    }
   }
 
   /**
@@ -108,19 +122,13 @@ function App() {
    * Stores enough previous state to allow undo.
    */
   function handleSwitchTurn() {
-    if (matchOver) return
-    setHistory((prev) => [
-      ...prev,
-      {
-        type: 'switch',
-        previousPlayerIndex: currentPlayerIndex,
-        previousBreak: currentBreak,
-        previousLastBallType: lastBallType,
-      },
-    ])
-    setCurrentPlayerIndex(1 - currentPlayerIndex)
-    setCurrentBreak(0)
-    setLastBallType(null)
+    if (!canEdit) return
+    const action = { type: 'switch_turn' }
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
+    }
   }
 
   /**
@@ -129,33 +137,20 @@ function App() {
    * required number of frames (based on bestOf), the match is over.
    */
   function handleEndFrame() {
-    if (matchOver) return
+    if (!canEdit) return
 
     const [p1, p2] = players
     if (p1.frameScore === p2.frameScore) {
-      // Simple rule: do not allow ending a tied frame
       window.alert('Frame is tied. Resolve the frame before ending it.')
       return
     }
 
-    const winnerIndex = p1.frameScore > p2.frameScore ? 0 : 1
-    const framesForWinner = players[winnerIndex].framesWon + 1
-    const framesNeededToWin = Math.floor(bestOf / 2) + 1
-
-    if (framesForWinner >= framesNeededToWin) {
-      setMatchWinnerIndex(winnerIndex)
+    const action = { type: 'end_frame' }
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
     }
-    setPlayers((prev) =>
-      prev.map((p, i) =>
-        i === winnerIndex ? { ...p, framesWon: p.framesWon + 1, frameScore: 0 } : { ...p, frameScore: 0 },
-      ),
-    )
-    setCurrentBreak(0)
-    setHistory([])
-    setFrameNumber((prev) => prev + 1)
-    setCurrentPlayerIndex(winnerIndex)
-    setRedsRemaining(15)
-    setLastBallType(null)
   }
 
   /**
@@ -163,30 +158,13 @@ function App() {
    * Uses the history stack to restore scores, break, redsRemaining, and turn.
    */
   function handleUndo() {
-    if (matchOver) return
+    if (!canEdit) return
     if (history.length === 0) return
-    const last = history[history.length - 1]
-    setHistory((prev) => prev.slice(0, prev.length - 1))
-
-    if (last.type === 'pot') {
-      updatePlayerScore(last.playerIndex, -last.points)
-      setCurrentBreak((prev) => Math.max(0, prev - last.points))
-      if (last.ballType) {
-        // Restore lastBallType based on previous history entry, if any.
-        const beforeLast = history[history.length - 2]
-        setLastBallType(beforeLast && beforeLast.ballType ? beforeLast.ballType : null)
-        if (last.ballType === 'red') {
-          setRedsRemaining((prev) => prev + 1)
-        }
-      }
-    } else if (last.type === 'foul') {
-      updatePlayerScore(last.opponentIndex, -last.points)
-      setCurrentBreak(last.previousBreak)
-      setLastBallType(null)
-    } else if (last.type === 'switch') {
-      setCurrentPlayerIndex(last.previousPlayerIndex)
-      setCurrentBreak(last.previousBreak)
-      setLastBallType(last.previousLastBallType ?? null)
+    const action = { type: 'undo' }
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
     }
   }
 
@@ -195,20 +173,18 @@ function App() {
    * Clears scores, frames won, break, history, and match winner.
    */
   function handleNewMatch() {
-    setPlayers((prev) =>
-      prev.map((p) => ({
-        ...p,
-        frameScore: 0,
-        framesWon: 0,
-      })),
-    )
-    setCurrentBreak(0)
-    setFrameNumber(1)
-    setCurrentPlayerIndex(0)
-    setHistory([])
-    setRedsRemaining(15)
-    setLastBallType(null)
-    setMatchWinnerIndex(null)
+    // In online rooms, only the referee can start a fresh match.
+    if (roomId && role !== 'referee') {
+      window.alert('Only the referee can start a new match in this room.')
+      return
+    }
+
+    const action = { type: 'new_match' }
+    if (roomId) {
+      sendAction(action)
+    } else {
+      dispatch(action)
+    }
   }
 
   return (
@@ -217,6 +193,13 @@ function App() {
         <div>
           <h1>Snooker Scoreboard</h1>
           <p className="subtitle">Tablet-friendly scoring for two players</p>
+          <p className="subtitle">
+            {roomId
+              ? `Online room · role: ${role ?? 'unknown'} · ${connectionStatus}${
+                  hasReferee ? ' · referee present' : ''
+                }`
+              : 'Local device mode (no server)'}
+          </p>
         </div>
         <div className="match-info">
           <div className="frame-info">
@@ -229,12 +212,11 @@ function App() {
               min="1"
               max="35"
               value={bestOf}
-              onChange={(e) =>
-                setBestOf(() => {
-                  const n = Number(e.target.value || 1)
-                  return Number.isNaN(n) ? 1 : Math.max(1, Math.min(35, n))
-                })
-              }
+              onChange={(e) => {
+                const n = Number(e.target.value || 1)
+                const clamped = Number.isNaN(n) ? 1 : Math.max(1, Math.min(35, n))
+                dispatch({ type: 'update_best_of', bestOf: clamped })
+              }}
             />
           </div>
           <button
@@ -247,6 +229,43 @@ function App() {
           <button className="secondary-button" type="button" onClick={handleNewMatch}>
             New match
           </button>
+          {!roomId && (
+            <>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setRoomMode('create')}
+              >
+                Create room
+              </button>
+              <div className="frame-info">
+                Join
+                <input
+                  type="text"
+                  placeholder="Room code"
+                  value={joinCodeInput}
+                  onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                />
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    if (!joinCodeInput.trim()) return
+                    setRoomMode('join')
+                  }}
+                >
+                  Join
+                </button>
+              </div>
+            </>
+          )}
+          {roomId && codes && (
+            <div className="frame-info">
+              <span>Player code: {codes.player}</span>
+              <span>Referee code: {codes.referee}</span>
+              <span>Viewer code: {codes.viewer}</span>
+            </div>
+          )}
         </div>
       </header>
 
