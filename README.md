@@ -27,7 +27,7 @@ Snooker Scoreboard is a small React + Node app for tracking snooker frames in a 
 ```bash
 cd SnookerScoreboard/backend
 npm install
-npm start    # starts the WebSocket server on port 4000
+npm start
 ```
 
 In a second terminal:
@@ -35,10 +35,10 @@ In a second terminal:
 ```bash
 cd SnookerScoreboard/frontend
 npm install
-npm run dev  # starts the React dev server (usually on http://localhost:5173)
+npm run dev 
 ```
 
-Then open the URL printed in the frontend terminal (usually `http://localhost:5173`).
+Then open the URL printed in the frontend terminal (`http://localhost:5173`).
 
 ## How to use during play
 
