@@ -1,28 +1,53 @@
 # Snooker Scoreboard
 
-Snooker Scoreboard is a small React + Node app for tracking snooker frames in a club or home setting. It runs in the browser (desktop, laptop, or tablet) and is designed to be readable across the room with large, touch‑friendly controls. The project is split into a **frontend** (Vite + React) and a **backend** (WebSocket server) so multiple people can share the same scoreboard in real time.
+A real-time snooker scoreboard built with React and Node.js. Designed for clubs, home play, or anywhere you need a large, readable score display with touch-friendly controls. The app runs in the browser and supports both local single-device use and multi-device online rooms via WebSocket.
 
 ## Features
 
-- **Two-player match tracking**: player names, frame scores, and frames won.
-- **Scoring controls**: buttons for all balls (Red, Yellow, Green, Brown, Blue, Pink, Black) with correct point values.
+- **Two-player match tracking**: editable player names, frame scores, current break, and frames won.
+- **Scoring controls**: buttons for all standard balls (Red 1, Yellow 2, Green 3, Brown 4, Blue 5, Pink 6, Black 7).
 - **Basic rules assistance**:
-  - Enforces the `red → colour → red → colour` pattern while reds remain (no back‑to‑back colours unless reds are gone).
-  - Allows multiple reds to be scored in a row.
-  - Tracks **reds remaining**.
+  - Enforces the red-colour-red-colour pattern while reds remain.
+  - Allows multiple reds scored in a row.
+  - Tracks reds remaining on the table.
 - **Frame and match logic**:
-  - `End frame` determines the frame winner from current points.
-  - `Best of N` setting; first to `floor(N / 2) + 1` frames wins the match.
-  - Match winner banner and automatic lockout of further scoring.
-- **History tools**: `Undo last action`, `Switch player at table`, `Foul to opponent` (+4, +5, +6, +7).
-- **Snooker rules panel**: in‑app, mobile‑friendly summary of basic scoring rules, with a link to the longer article on [billiardworld.com](https://www.billiardworld.com/snooker.html).
+  - End frame awards it to the current points leader.
+  - Best-of-N setting (1-35); first to `floor(N/2) + 1` frames wins.
+  - Match winner banner and automatic scoring lockout.
+- **History tools**: undo last action (pot, foul, or turn switch), switch player at table, foul-to-opponent (+4, +5, +6, +7).
+- **Online rooms** (WebSocket):
+  - Create a room and share access codes for players, referee, and viewers.
+  - Referee mode locks scoring to a single authority; without a referee, players can score directly.
+  - State is broadcast to all connected clients in real time.
+- **In-app rules panel**: mobile-friendly scoring guide with a link to the full rules on [billiardworld.com](https://www.billiardworld.com/snooker.html).
+
+## Tech stack
+
+| Layer    | Technology                    |
+| -------- | ----------------------------- |
+| Frontend | React 19, Vite 7, JavaScript |
+| Backend  | Node.js, ws (WebSocket)      |
 
 ## Project structure
 
-- `frontend/` – Vite + React single-page app (scoreboard UI)
-- `backend/` – Node WebSocket server that manages rooms, roles, and shared state
+```
+SnookerScoreboard/
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx              # Main scoreboard UI
+│   │   ├── App.css              # Styles
+│   │   ├── snookerState.js      # Pure state reducer (shared with backend)
+│   │   └── useRoomConnection.js # WebSocket client hook
+│   └── package.json
+├── backend/
+│   ├── server.js                # WebSocket server (rooms, roles, state sync)
+│   └── package.json
+└── README.md
+```
 
 ## Running locally
+
+Start the backend:
 
 ```bash
 cd SnookerScoreboard/backend
@@ -30,15 +55,22 @@ npm install
 npm start
 ```
 
-In a second terminal:
+In a second terminal, start the frontend:
 
 ```bash
 cd SnookerScoreboard/frontend
 npm install
-npm run dev 
+npm run dev
 ```
 
-Then open the URL printed in the frontend terminal (`http://localhost:5173`).
+Open the URL printed in the frontend terminal (default `http://localhost:5173`).
+
+## Environment variables
+
+| Variable                   | Default                | Description                          |
+| -------------------------- | ---------------------- | ------------------------------------ |
+| `PORT`                     | `4000`                 | Backend WebSocket server port        |
+| `VITE_SNOOKER_SERVER_URL`  | `ws://localhost:4000`  | Frontend WebSocket endpoint override |
 
 ## How to use during play
 
@@ -50,16 +82,14 @@ Then open the URL printed in the frontend terminal (`http://localhost:5173`).
 
 ### Multi-user / online mode
 
-1. Start the backend (`backend/`) and frontend (`frontend/`) as described above.
+1. Start the backend and frontend as described above.
 2. On one device, open the app and click **Create room**:
-   - You’ll see three access codes:
-     - **Player code** – share with up to two players.
-     - **Referee code** – share with the person who should control scoring.
-     - **Viewer code** – share with any extra spectators / devices.
+   - You'll see three access codes:
+     - **Player code** — share with up to two players.
+     - **Referee code** — share with the person who should control scoring.
+     - **Viewer code** — share with any extra spectators / devices.
 3. Players and referee join by entering the appropriate code and clicking **Join**.
-4. When a referee is connected, only the referee can change scores or start a new match; players become read-only for scoring. Without a referee, players can update scores directly.
-5. At any time you can adjust **Best of** for the room. Pressing **New match**:
-   - Resets frame scores, frames won, breaks, history, and the current frame number back to 1.
-   - Keeps the same player names, best-of setting, room, referee, and audience so you can play another match in the same session.
+4. When a referee is connected, only the referee can change scores or start a new match; players become read-only. Without a referee, players can score directly.
+5. **Best of** can be adjusted at any time. Pressing **New match** resets frame scores, frames won, break, history, and frame number back to 1 while keeping player names, best-of setting, room, referee, and audience intact.
 
-For a longer description of official rules, see the snooker article on [billiardworld.com](https://www.billiardworld.com/snooker.html). This project only implements a simplified version of the rules suitable for casual scoring.
+For the full official rules, see the snooker article on [billiardworld.com](https://www.billiardworld.com/snooker.html). This project implements a simplified subset suitable for casual scoring.
