@@ -2,6 +2,10 @@
 
 A real-time snooker scoreboard built with React and Node.js. Designed for clubs, home play, or anywhere you need a large, readable score display with touch-friendly controls. The app runs in the browser and supports both local single-device use and multi-device online rooms via WebSocket.
 
+**🔗 Live Demo: https://2426-bingxianxie.github.io/SnookerScoreboard/**
+
+> The frontend is hosted on GitHub Pages and the WebSocket backend on Render's free tier. If no one has used it recently, the first online-room action may take ~50 seconds while the backend wakes from sleep.
+
 ## Features
 
 - **Two-player match tracking**: editable player names, frame scores, current break, and frames won.
