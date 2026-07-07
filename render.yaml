@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: snooker-scoreboard-server
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "24"

@@ -7,7 +7,12 @@ import { createInitialState, matchReducer } from '../frontend/src/snookerState.j
 
 const PORT = process.env.PORT || 4000;
 
-const server = http.createServer();
+// Respond to plain HTTP requests (health checks, wake pings). WebSocket
+// upgrade requests are handled separately by the WebSocketServer below.
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Snooker scoreboard server OK');
+});
 const wss = new WebSocketServer({ server });
 
 // internalRoomId -> { state, codes, clients: Map<ws, { role, playerIndex | null }> }
